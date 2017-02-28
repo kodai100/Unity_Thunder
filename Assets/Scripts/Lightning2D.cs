@@ -14,7 +14,9 @@ public class Lightning2D : MonoBehaviour {
     public int m = 3;
     public int eta = 1;
 
-    void Start() {
+    public float branch = 0.00001f;
+
+    void Awake() {
         laplace_cs = GetComponent<LaplaceCS>();
         width = laplace_cs.width;
         height = laplace_cs.height;
@@ -28,7 +30,13 @@ public class Lightning2D : MonoBehaviour {
 
     void Update() {
         if (Input.GetKeyDown(KeyCode.I)) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    lightning[y, x] = potential[y, x] * 0.5f;   // 背景にポテンシャル
+                }
+            }
             LightningProcess(new Vector2(Random.Range(0f, width), 0f));
+            ApplyTexture();
         }
     }
 
@@ -45,7 +53,7 @@ public class Lightning2D : MonoBehaviour {
         for (int y = 0; y < height; y++) {
             for(int x = 0; x < width; x++) {
                 potential[y, x] = potential_from_laplace[y * width + x];
-                lightning[y, x] = 0;
+                lightning[y, x] = potential[y, x] * 0.5f;   // 背景にポテンシャル
             }
         }
 
@@ -54,10 +62,10 @@ public class Lightning2D : MonoBehaviour {
     }
 
     void LightningProcess(Vector2 leader_pos) {
-
         
         lightning[(int)leader_pos.y, (int)leader_pos.x] = 1f;
-        if (leader_pos.y == height - 1) return;
+        if (leader_pos.y == height - 1 || leader_pos.x == 0 || leader_pos.x == width - 1) return;
+        // if (potential[(int)leader_pos.y, (int)leader_pos.x] == 0f) return;
 
         // 1. 周辺のセルからランダムにM個セルを選ぶ
         List<Vector2> m_cells_index = new List<Vector2>();
@@ -93,20 +101,45 @@ public class Lightning2D : MonoBehaviour {
         // 2.進路先の決定
         float total_potential = 0f;
         for (int i = 0; i < m_cells_index.Count; i++) {
-            total_potential += potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x];
+            total_potential += Mathf.Pow(potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x], eta);
         }
 
-        Vector2 next_leader_pos = leader_pos;
-        float max_possibility = 0f;
+        float[] possibilities = new float[m_cells_index.Count];
         for (int i = 0; i < m_cells_index.Count; i++) {
-            float tmp_possibility = potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x] / total_potential;
-            if (max_possibility < tmp_possibility) {
-                next_leader_pos = new Vector2(m_cells_index[i].x, m_cells_index[i].y);
-                max_possibility = tmp_possibility;
+            possibilities[i] = Mathf.Pow(potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x], eta) / total_potential;
+        }
+
+        // ソート(先頭が一番大きい)
+        for(int start = 1; start < possibilities.Length; start++) {
+            for (int end = possibilities.Length - 1; end >= start; end--) {
+                if (possibilities[end - 1] < possibilities[end]) {
+                    // 確率に基づいて確率配列を祖ソート
+                    float tmp = possibilities[end - 1];
+                    possibilities[end - 1] = possibilities[end];
+                    possibilities[end] = tmp;
+
+                    // 同様にセルインデックスもソート
+                    Vector2 tmpv = m_cells_index[end - 1];
+                    m_cells_index[end - 1] = m_cells_index[end];
+                    m_cells_index[end] = tmpv;
+                }
             }
         }
 
-        LightningProcess(next_leader_pos);
+        // 最大値に等しいもしくは近い値はリーダー分岐する
+        List<Vector2> leaders = new List<Vector2>();
+        leaders.Add(m_cells_index[0]);
+        for(int i = 1; i < m_cells_index.Count; i++) {
+            if(possibilities[0] - possibilities[i] < branch) {
+                leaders.Add(m_cells_index[i]);
+            }
+        }
+
+        // 各リーダーに関して雷再帰処理
+        foreach (Vector2 next_leader_pos in leaders) {
+            LightningProcess(next_leader_pos);
+        }
+        
     }
     
     void ApplyTexture() {
