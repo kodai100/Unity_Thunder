@@ -1,0 +1,40 @@
+﻿#pragma kernel Laplace_Phase2
+
+#define SIMULATION_BLOCK_SIZE 256
+
+StructuredBuffer<float> _PotentialBufferRead;
+RWStructuredBuffer<float> _PotentialBufferWrite;
+
+cbuffer cb {
+	float SOR_COEF;
+	uint BUFFER_SIZE;
+	uint WIDTH;
+	uint HEIGHT;
+};
+
+[numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
+void Laplace_Phase2(uint3 DTid : SV_DispatchThreadID) {
+
+	const uint center = DTid.x;
+	
+	if (center < WIDTH || center % WIDTH == 0 || center >= BUFFER_SIZE - WIDTH || center % WIDTH == WIDTH - 1) {
+		_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+		return;
+	}
+
+	uint up = center - WIDTH;
+	uint left = center - 1;
+	uint bottom = center + WIDTH;
+	uint right = center + 1;
+
+	// Jacobi
+	// _PotentialBufferWrite[center] = 0.25 * (_PotentialBufferRead[left] + _PotentialBufferRead[right] + _PotentialBufferRead[up] + _PotentialBufferRead[bottom]);
+
+	// SOR Phase 2
+	if (center % 2 == 0) {
+		_PotentialBufferWrite[center] = _PotentialBufferRead[center] + SOR_COEF * (0.25 * (_PotentialBufferRead[left] + _PotentialBufferRead[right] + _PotentialBufferRead[up] + _PotentialBufferRead[bottom]) - _PotentialBufferRead[center]);
+	}
+	else {
+		_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+	}
+}
