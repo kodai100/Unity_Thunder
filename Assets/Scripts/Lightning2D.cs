@@ -10,8 +10,7 @@ public class Lightning2D : MonoBehaviour {
     LaplaceCS laplace_cs;
 
     int width, height;
-
-    public Vector2 start_position;
+    
     public int m = 3;
     public int eta = 1;
 
@@ -27,6 +26,18 @@ public class Lightning2D : MonoBehaviour {
         lightning_texture.filterMode = FilterMode.Point;
     }
 
+    void Update() {
+        if (Input.GetKeyDown(KeyCode.I)) {
+            LightningProcess(new Vector2(Random.Range(0f, width), 0f));
+        }
+    }
+
+    void OnGUI() {
+        if (laplace_cs.mode == LaplaceCS.Mode.Static) {
+            GUI.DrawTexture(new Rect(new Vector2(0, 0), new Vector2(width, height)), lightning_texture);
+        }
+    }
+
     // Called From Laplace.cs
     // Laplace.cs mode must be static
     public void InitializeLightning (float[] potential_from_laplace) {
@@ -38,83 +49,66 @@ public class Lightning2D : MonoBehaviour {
             }
         }
 
-        LightningProcess();
-
-        
-    }
-
-    void LightningProcess() {
-
-        Vector2 leader_pos = new Vector2( Random.Range(0, width), 0);
-
-        do {
-            lightning[(int)leader_pos.y, (int)leader_pos.x] = 1f;
-
-            // 1. 周辺のセルからランダムにM個セルを選ぶ
-            List<Vector2> m_cells_index = new List<Vector2>();
-            while(m_cells_index.Count < m) {
-                int tmpx = (int)Random.Range(leader_pos.x - 2, leader_pos.x + 3);
-                int tmpy = (int)Random.Range(leader_pos.y - 2, leader_pos.y + 3);
-
-                // セルリーダー重複判定
-                if (tmpx == leader_pos.x && tmpy == leader_pos.y) {
-                    continue;
-                }
-
-                // セル範囲外判定
-                if(tmpx < 0 || tmpx >= width || tmpy < 0 || tmpy >= height) {
-                    continue;
-                }
-
-                // セル重複判定
-                bool isSame = false;
-                for (int j = 0; j < m_cells_index.Count; j++) {
-                    if ((tmpx == m_cells_index[j].x && tmpy == m_cells_index[j].y)) {
-                        isSame = true;
-                        break;
-                    }
-                }
-                if (isSame) continue;
-
-                // Debug.Log(tmpx + "," + tmpy);
-                m_cells_index.Add(new Vector2(tmpx, tmpy));
-            }
-
-            // 2.進路先の決定
-            float total_potential = 0f;
-            for (int i = 0; i < m_cells_index.Count; i++) {
-                total_potential += potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x];
-            }
-
-            Vector2 next_leader_pos = leader_pos;
-            float max_possibility = 0f;
-            for(int i = 0; i<m_cells_index.Count; i++) {
-                float tmp_possibility = potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x] / total_potential;
-                if(max_possibility < tmp_possibility) {
-                    next_leader_pos = new Vector2(m_cells_index[i].x, m_cells_index[i].y);
-                    max_possibility = tmp_possibility;
-                }
-            }
-            
-            leader_pos = next_leader_pos;
-
-        } while(leader_pos.y != height-1);
-
+        LightningProcess(new Vector2(Random.Range(0f, width), 0f)); // 初期座標で実行
         ApplyTexture();
     }
-	
-	void Update () {
-        if (Input.GetKeyDown(KeyCode.I)) {
-            LightningProcess();
-        }
-	}
 
-    void OnGUI() {
-        if (laplace_cs.mode == LaplaceCS.Mode.Static) {
-            GUI.DrawTexture(new Rect(new Vector2(0, 0), new Vector2(width, height)), lightning_texture);
+    void LightningProcess(Vector2 leader_pos) {
+
+        
+        lightning[(int)leader_pos.y, (int)leader_pos.x] = 1f;
+        if (leader_pos.y == height - 1) return;
+
+        // 1. 周辺のセルからランダムにM個セルを選ぶ
+        List<Vector2> m_cells_index = new List<Vector2>();
+        while (m_cells_index.Count < m) {
+            // TODO 長さランダマイズ
+
+            int tmpx = (int)Random.Range(leader_pos.x - 2, leader_pos.x + 3);
+            int tmpy = (int)Random.Range(leader_pos.y - 2, leader_pos.y + 3);
+
+            // セルリーダー重複判定
+            if (tmpx == leader_pos.x && tmpy == leader_pos.y) {
+                continue;
+            }
+
+            // セル範囲外判定
+            if (tmpx < 0 || tmpx >= width || tmpy < 0 || tmpy >= height) {
+                continue;
+            }
+
+            // セル重複判定
+            bool isSame = false;
+            for (int j = 0; j < m_cells_index.Count; j++) {
+                if ((tmpx == m_cells_index[j].x && tmpy == m_cells_index[j].y)) {
+                    isSame = true;
+                    break;
+                }
+            }
+            if (isSame) continue;
+            
+            m_cells_index.Add(new Vector2(tmpx, tmpy));
         }
+
+        // 2.進路先の決定
+        float total_potential = 0f;
+        for (int i = 0; i < m_cells_index.Count; i++) {
+            total_potential += potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x];
+        }
+
+        Vector2 next_leader_pos = leader_pos;
+        float max_possibility = 0f;
+        for (int i = 0; i < m_cells_index.Count; i++) {
+            float tmp_possibility = potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x] / total_potential;
+            if (max_possibility < tmp_possibility) {
+                next_leader_pos = new Vector2(m_cells_index[i].x, m_cells_index[i].y);
+                max_possibility = tmp_possibility;
+            }
+        }
+
+        LightningProcess(next_leader_pos);
     }
-
+    
     void ApplyTexture() {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -123,4 +117,5 @@ public class Lightning2D : MonoBehaviour {
         }
         lightning_texture.Apply();
     }
+
 }
