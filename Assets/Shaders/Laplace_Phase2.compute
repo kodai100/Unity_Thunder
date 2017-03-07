@@ -27,14 +27,18 @@ void Laplace_Phase2(uint3 DTid : SV_DispatchThreadID) {
 	uint bottom = center + WIDTH;
 	uint right = center + 1;
 
-	// Jacobi
-	// _PotentialBufferWrite[center] = 0.25 * (_PotentialBufferRead[left] + _PotentialBufferRead[right] + _PotentialBufferRead[up] + _PotentialBufferRead[bottom]);
-
-	// SOR Phase 2
-	if (center % 2 == 0) {
-		_PotentialBufferWrite[center] = _PotentialBufferRead[center] + SOR_COEF * (0.25 * (_PotentialBufferRead[left] + _PotentialBufferRead[right] + _PotentialBufferRead[up] + _PotentialBufferRead[bottom]) - _PotentialBufferRead[center]);
-	}
-	else {
-		_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+	// SOR Phase2
+	if ((uint)(center / WIDTH) % 2 == 0) {
+		if (center % 2 == 0) {
+			_PotentialBufferWrite[center] = _PotentialBufferRead[center] + SOR_COEF * (0.25 * (_PotentialBufferRead[left] + _PotentialBufferRead[right] + _PotentialBufferRead[up] + _PotentialBufferRead[bottom]) - _PotentialBufferRead[center]);
+		} else {
+			_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+		}
+	} else {
+		if (center % 2 != 0) {
+			_PotentialBufferWrite[center] = _PotentialBufferRead[center] + SOR_COEF * (0.25 * (_PotentialBufferRead[left] + _PotentialBufferRead[right] + _PotentialBufferRead[up] + _PotentialBufferRead[bottom]) - _PotentialBufferRead[center]);
+		} else {
+			_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+		}
 	}
 }

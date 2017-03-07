@@ -30,7 +30,7 @@ public class LaplaceCS : MonoBehaviour {
     [Range(0f, 1f)] public float up_strength;
     [Range(0f, 1f)] public float bottom_strength;
 
-    [Range(1.0f, 1.3f)] public float sor_coef = 1f;
+    [Range(1.0f, 2.0f)] public float sor_coef = 1f;
 
     Texture2D texture;
     float[] potential_read, potential_write;
