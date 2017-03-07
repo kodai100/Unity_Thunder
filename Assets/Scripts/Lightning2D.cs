@@ -62,83 +62,97 @@ public class Lightning2D : MonoBehaviour {
     }
 
     void LightningProcess(Vector2 leader_pos) {
-        
-        lightning[(int)leader_pos.y, (int)leader_pos.x] = 1f;
-        if (leader_pos.y == height - 1 || leader_pos.x == 0 || leader_pos.x == width - 1) return;
-        // if (potential[(int)leader_pos.y, (int)leader_pos.x] == 0f) return;
 
-        // 1. 周辺のセルからランダムにM個セルを選ぶ
-        List<Vector2> m_cells_index = new List<Vector2>();
-        while (m_cells_index.Count < m) {
-            // TODO 長さランダマイズ
+        Queue<Vector2> leaders = new Queue<Vector2>();
 
-            int tmpx = (int)Random.Range(leader_pos.x - 2, leader_pos.x + 3);
-            int tmpy = (int)Random.Range(leader_pos.y - 2, leader_pos.y + 3);
+        // 初期状態
+        bool land = false;
+        leaders.Enqueue(leader_pos);
 
-            // セルリーダー重複判定
-            if (tmpx == leader_pos.x && tmpy == leader_pos.y) {
-                continue;
-            }
+        while (!land) {
 
-            // セル範囲外判定
-            if (tmpx < 0 || tmpx >= width || tmpy < 0 || tmpy >= height) {
-                continue;
-            }
+            for(int i = 0; i < leaders.Count; i++) {
 
-            // セル重複判定
-            bool isSame = false;
-            for (int j = 0; j < m_cells_index.Count; j++) {
-                if ((tmpx == m_cells_index[j].x && tmpy == m_cells_index[j].y)) {
-                    isSame = true;
+                Vector2 tmp_leader = leaders.Dequeue();
+                lightning[(int)tmp_leader.y, (int)tmp_leader.x] = 1f;
+
+                if (tmp_leader.y == height - 1 || tmp_leader.x == 0 || tmp_leader.x == width - 1) {
+                    land = true;
                     break;
                 }
-            }
-            if (isSame) continue;
-            
-            m_cells_index.Add(new Vector2(tmpx, tmpy));
-        }
 
-        // 2.進路先の決定
-        float total_potential = 0f;
-        for (int i = 0; i < m_cells_index.Count; i++) {
-            total_potential += Mathf.Pow(potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x], eta);
-        }
+                // 1. 周辺のセルからランダムにM個セルを選ぶ
+                List<Vector2> m_cells_index = new List<Vector2>();
+                while (m_cells_index.Count < m) {
+                    // TODO 長さランダマイズ
 
-        float[] possibilities = new float[m_cells_index.Count];
-        for (int i = 0; i < m_cells_index.Count; i++) {
-            possibilities[i] = Mathf.Pow(potential[(int)m_cells_index[i].y, (int)m_cells_index[i].x], eta) / total_potential;
-        }
+                    int tmpx = (int)Random.Range(tmp_leader.x - 5, tmp_leader.x + 5);
+                    int tmpy = (int)Random.Range(tmp_leader.y - 5, tmp_leader.y + 5);
 
-        // ソート(先頭が一番大きい)
-        for(int start = 1; start < possibilities.Length; start++) {
-            for (int end = possibilities.Length - 1; end >= start; end--) {
-                if (possibilities[end - 1] < possibilities[end]) {
-                    // 確率に基づいて確率配列を祖ソート
-                    float tmp = possibilities[end - 1];
-                    possibilities[end - 1] = possibilities[end];
-                    possibilities[end] = tmp;
+                    // セルリーダー重複判定
+                    if (tmpx == leader_pos.x && tmpy == leader_pos.y) {
+                        continue;
+                    }
 
-                    // 同様にセルインデックスもソート
-                    Vector2 tmpv = m_cells_index[end - 1];
-                    m_cells_index[end - 1] = m_cells_index[end];
-                    m_cells_index[end] = tmpv;
+                    // セル範囲外判定
+                    if (tmpx < 0 || tmpx >= width || tmpy < 0 || tmpy >= height) {
+                        continue;
+                    }
+
+                    // セル重複判定
+                    bool isSame = false;
+                    for (int j = 0; j < m_cells_index.Count; j++) {
+                        if ((tmpx == m_cells_index[j].x && tmpy == m_cells_index[j].y)) {
+                            isSame = true;
+                            break;
+                        }
+                    }
+                    if (isSame) continue;
+
+                    m_cells_index.Add(new Vector2(tmpx, tmpy));
                 }
-            }
-        }
 
-        // 最大値に等しいもしくは近い値はリーダー分岐する
-        List<Vector2> leaders = new List<Vector2>();
-        leaders.Add(m_cells_index[0]);
-        for(int i = 1; i < m_cells_index.Count; i++) {
-            if(possibilities[0] - possibilities[i] < branch) {
-                leaders.Add(m_cells_index[i]);
-            }
-        }
+                // 2.進路先の決定
+                float total_potential = 0f;
+                for (int j = 0; j < m_cells_index.Count; j++) {
+                    total_potential += Mathf.Pow(potential[(int)m_cells_index[j].y, (int)m_cells_index[j].x], eta);
+                }
 
-        // 各リーダーに関して雷再帰処理
-        foreach (Vector2 next_leader_pos in leaders) {
-            LightningProcess(next_leader_pos);
+                float[] possibilities = new float[m_cells_index.Count];
+                for (int j = 0; j < m_cells_index.Count; j++) {
+                    possibilities[j] = Mathf.Pow(potential[(int)m_cells_index[j].y, (int)m_cells_index[j].x], eta) / total_potential;
+                }
+
+                // ソート(先頭が一番大きい)
+                for (int start = 1; start < possibilities.Length; start++) {
+                    for (int end = possibilities.Length - 1; end >= start; end--) {
+                        if (possibilities[end - 1] < possibilities[end]) {
+                            // 確率に基づいて確率配列を祖ソート
+                            float tmp = possibilities[end - 1];
+                            possibilities[end - 1] = possibilities[end];
+                            possibilities[end] = tmp;
+
+                            // 同様にセルインデックスもソート
+                            Vector2 tmpv = m_cells_index[end - 1];
+                            m_cells_index[end - 1] = m_cells_index[end];
+                            m_cells_index[end] = tmpv;
+                        }
+                    }
+                }
+
+                // 最大値に等しいもしくは近い値はリーダー分岐する
+                leaders.Enqueue(m_cells_index[0]);
+                for (int j = 1; j < m_cells_index.Count; j++) {
+                    if (possibilities[0] - possibilities[j] < branch) {
+                        leaders.Enqueue(m_cells_index[j]);
+                    }
+                }
+                
+            }
+            
+
         }
+        
         
     }
     
@@ -152,3 +166,4 @@ public class Lightning2D : MonoBehaviour {
     }
 
 }
+
