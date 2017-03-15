@@ -10,6 +10,8 @@ public class Lightning2D : MonoBehaviour {
     LaplaceCS laplace_cs;
 
     int width, height;
+
+    public bool dispQuantity = true;
     
     public int m = 3;
     public int eta = 1;
@@ -32,7 +34,11 @@ public class Lightning2D : MonoBehaviour {
         if (Input.GetKeyDown(KeyCode.I)) {
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    lightning[y, x] = potential[y, x] * 0.5f;   // 背景にポテンシャル
+                    if (dispQuantity) {
+                        lightning[y, x] = potential[y, x] * 0.5f;   // 背景にポテンシャル
+                    } else {
+                        lightning[y, x] = 0f;
+                    }
                 }
             }
             LightningProcess(new Vector2(Random.Range(0f, width), 0f));
@@ -53,7 +59,11 @@ public class Lightning2D : MonoBehaviour {
         for (int y = 0; y < height; y++) {
             for(int x = 0; x < width; x++) {
                 potential[y, x] = potential_from_laplace[y * width + x];
-                lightning[y, x] = potential[y, x] * 0.5f;   // 背景にポテンシャル
+                if (dispQuantity) {
+                    lightning[y, x] = potential[y, x] * 0.5f;   // 背景にポテンシャル
+                } else {
+                    lightning[y, x] = 0f;
+                }
             }
         }
 
@@ -69,7 +79,9 @@ public class Lightning2D : MonoBehaviour {
         bool land = false;
         leaders.Enqueue(leader_pos);
 
-        while (!land) {
+        int c = 0;
+        while (!land && c < 100000) {
+            c++;
 
             for(int i = 0; i < leaders.Count; i++) {
 
@@ -79,6 +91,10 @@ public class Lightning2D : MonoBehaviour {
                 if (tmp_leader.y == height - 1 || tmp_leader.x == 0 || tmp_leader.x == width - 1) {
                     land = true;
                     break;
+                }
+
+                if (Random.Range(0f, 1f) < 0.00001f) {
+                    continue;  // 伸びにくく
                 }
 
                 // 1. 周辺のセルからランダムにM個セルを選ぶ

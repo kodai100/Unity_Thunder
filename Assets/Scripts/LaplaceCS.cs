@@ -25,10 +25,10 @@ public class LaplaceCS : MonoBehaviour {
     public float allowed_error = 0.00001f;
     public int allowed_iter = 1000;
 
-    [Range(0f, 1f)] public float left_strength;
-    [Range(0f, 1f)] public float right_strength;
-    [Range(0f, 1f)] public float up_strength;
-    [Range(0f, 1f)] public float bottom_strength;
+    [Range(0f, 10f)] public float left_strength;
+    [Range(0f, 10f)] public float right_strength;
+    [Range(0f, 10f)] public float up_strength;
+    [Range(0f, 10f)] public float bottom_strength;
 
     [Range(1.0f, 2.0f)] public float sor_coef = 1f;
 
@@ -85,7 +85,7 @@ public class LaplaceCS : MonoBehaviour {
     void SetBoundaryCondition() {
 
         for (int i = 0; i < bufferSize; i++) {
-            potential_read[i] = 0;
+            potential_read[i] = 0.5f;
         }
 
         for (int i = 0; i < bufferSize; i++) {
