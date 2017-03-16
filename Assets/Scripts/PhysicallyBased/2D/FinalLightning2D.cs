@@ -51,27 +51,23 @@ public class FinalLightning2D : MonoBehaviour {
 
     public int width, height;
     public bool dispQuantity = true;
-    public int eta = 1;
+    public float eta = 1;
     public float ec = 0.0003f;  // 最低絶縁破壊電界値
     XORShift random;
     
-    bool land = false;
-    int iter = 0;
-    bool processing = false;
+    bool land;
 
     void Start() {
 
         InitializeLightning();
         InitializeLaplaceSolver();
-        SetBoundaryCondition();
 
+        SetBoundaryCondition();
+        
         cells[0, width / 2].state = State.LIGHTNING;
 
         // Update内でループ
-        processing = true;
         land = false;
-
-        ApplyTexture();
     }
 
     void Update() {
@@ -115,8 +111,7 @@ public class FinalLightning2D : MonoBehaviour {
                 }
             }
 
-            // 最も確率の高いセルを選ぶ
-            float tmp_max_possibility = 0;
+            // 最低絶縁破壊電界値よりも大きい確率であった場合、破壊を起こす
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     if(cells[y,x].state == State.CANDIDATE) {
@@ -125,30 +120,11 @@ public class FinalLightning2D : MonoBehaviour {
                             cells[y, x].state = State.LIGHTNING;
                             cells[y, x].potential = 0;
                         }
-                        //if(tmp_max_possibility < possibility) {
-                        //    tmp_max_possibility = possibility;
-                        //}
                     }
                 }
             }
-
-            //// 最大値に近いセルも選ぶ
-            //for (int y = 0; y < height; y++) {
-            //    for (int x = 0; x < width; x++) {
-            //        if(cells[y, x].state == State.CANDIDATE) {
-            //            float possibility = Mathf.Pow(cells[y, x].potential, eta) / Mathf.Pow(sum, eta);
-            //            if (possibility + 5e-5f > tmp_max_possibility) {
-            //                cells[y, x].state = State.LIGHTNING;
-            //                cells[y, x].potential = 0;
-            //            }
-            //        }
-            //    }
-            //}
             
             ApplyTexture();
-
-            if (iter > 10000) processing = false;
-            else iter++;
 
         }
     }
@@ -158,7 +134,7 @@ public class FinalLightning2D : MonoBehaviour {
         GUI.DrawTexture(new Rect(new Vector2(0, 0), new Vector2(width, height)), lightning_texture);
     }
 
-    void OnDestroy() {
+    void OnDisable() {
         potential_buffer_read.Release();
         potential_buffer_write.Release();
         phase1_to_2.Release();
@@ -280,9 +256,7 @@ public class FinalLightning2D : MonoBehaviour {
                 for (int x = 0; x < width; x++) {
                     if (cells[y, x].state == State.LIGHTNING) {
                         lightning_texture.SetPixel(x, (height - 1) - y, new Color(1, 1, 1));
-                    } else if (cells[y, x].state == State.CANDIDATE) {
-                        //lightning_texture.SetPixel(x, (height - 1) - y, new Color(1, 1, 0));
-                    } else {
+                    } else { 
                         lightning_texture.SetPixel(x, (height - 1) - y, new Color(cells[y, x].potential, cells[y, x].potential, cells[y, x].potential));
                     }
                 }
