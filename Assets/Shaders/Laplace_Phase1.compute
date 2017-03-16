@@ -2,8 +2,13 @@
 
 #define SIMULATION_BLOCK_SIZE 256
 
-StructuredBuffer<float> _PotentialBufferRead;
-RWStructuredBuffer<float> _PotentialBufferWrite;
+struct ForGPU {
+	bool isBoundary;
+	float potential;
+};
+
+StructuredBuffer<ForGPU> _PotentialBufferRead;
+RWStructuredBuffer<ForGPU> _PotentialBufferWrite;
 
 cbuffer cb {
 	float SOR_COEF;
@@ -22,6 +27,11 @@ void Laplace_Phase1(uint3 DTid : SV_DispatchThreadID) {
 		return;
 	}
 
+	if (_PotentialBufferRead[center].isBoundary) {
+		_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+		return;
+	}
+
 	uint up = center - WIDTH;
 	uint left = center - 1;
 	uint bottom = center + WIDTH;
@@ -30,18 +40,18 @@ void Laplace_Phase1(uint3 DTid : SV_DispatchThreadID) {
 	// SOR Phase1
 	if ((uint)(center / WIDTH) % 2 == 0) {
 		if (center % 2 != 0) {
-			_PotentialBufferWrite[center] = _PotentialBufferRead[center] + SOR_COEF * (0.25 * (_PotentialBufferRead[left] + _PotentialBufferRead[right] + _PotentialBufferRead[up] + _PotentialBufferRead[bottom]) - _PotentialBufferRead[center]);
+			_PotentialBufferWrite[center].potential = _PotentialBufferRead[center].potential + SOR_COEF * (0.25 * (_PotentialBufferRead[left].potential + _PotentialBufferRead[right].potential + _PotentialBufferRead[up].potential + _PotentialBufferRead[bottom].potential) - _PotentialBufferRead[center].potential);
 		}
 		else {
-			_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+			_PotentialBufferWrite[center].potential = _PotentialBufferRead[center].potential;
 		}
 	}
 	else {
 		if (center % 2 == 0) {
-			_PotentialBufferWrite[center] = _PotentialBufferRead[center] + SOR_COEF * (0.25 * (_PotentialBufferRead[left] + _PotentialBufferRead[right] + _PotentialBufferRead[up] + _PotentialBufferRead[bottom]) - _PotentialBufferRead[center]);
+			_PotentialBufferWrite[center].potential = _PotentialBufferRead[center].potential + SOR_COEF * (0.25 * (_PotentialBufferRead[left].potential + _PotentialBufferRead[right].potential + _PotentialBufferRead[up].potential + _PotentialBufferRead[bottom].potential) - _PotentialBufferRead[center].potential);
 		}
 		else {
-			_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+			_PotentialBufferWrite[center].potential = _PotentialBufferRead[center].potential;
 		}
 	}
 

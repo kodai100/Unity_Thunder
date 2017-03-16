@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 public enum State {
@@ -17,6 +18,11 @@ public struct CellState {
         this.state = state;
     }
 };
+
+public struct ForGPU {
+    public bool isBoundary;
+    public float potential;
+}
 
 public class FinalLightning2D : MonoBehaviour {
 
@@ -40,33 +46,30 @@ public class FinalLightning2D : MonoBehaviour {
 
     public float sor_coef = 1.8f;
     public int iterPerStep = 10;
-    float[] potential_read, potential_write;
+    ForGPU[] potential_read;
     #endregion Laplace
 
     public int width, height;
     public bool dispQuantity = true;
-    public int m = 3;
     public int eta = 1;
-    public float branch = 0.00001f;
+    public float ec = 0.0003f;  // 最低絶縁破壊電界値
     XORShift random;
     
     bool land = false;
     int iter = 0;
     bool processing = false;
 
-    void Awake() {
-        InitializeLightning();
-        InitializeLaplaceSolver();
-    }
-
     void Start() {
 
+        InitializeLightning();
+        InitializeLaplaceSolver();
         SetBoundaryCondition();
 
         cells[0, width / 2].state = State.LIGHTNING;
 
         // Update内でループ
         processing = true;
+        land = false;
 
         ApplyTexture();
     }
@@ -75,28 +78,28 @@ public class FinalLightning2D : MonoBehaviour {
 
         if (!land) {
 
+            LaplaceProcess();
+
             // 全セルについて候補点の計算
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
 
                     if (cells[y, x].state == State.LIGHTNING) {
-                        // 
                         if (y == height - 1 || x == 0 || x == width - 1) {
-
                             land = true;
                             break;
                         }
 
                         // North cell (初期位置を考慮してy判定も入れておく)
                         if(y - 1 > 0) {
-                            if (cells[x, y - 1].state != State.LIGHTNING) cells[x, y - 1].state = State.CANDIDATE;
+                            if (cells[y - 1, x].state != State.LIGHTNING) cells[y-1, x].state = State.CANDIDATE;
                         }
                         // South cell
-                        if (cells[x, y + 1].state != State.LIGHTNING) cells[x, y + 1].state = State.CANDIDATE;
+                        if (cells[y + 1, x].state != State.LIGHTNING) cells[y+1, x].state = State.CANDIDATE;
                         // East cell
-                        if (cells[x + 1, y].state != State.LIGHTNING) cells[x + 1, y].state = State.CANDIDATE;
+                        if (cells[y, x + 1].state != State.LIGHTNING) cells[y, x+1].state = State.CANDIDATE;
                         // West cell
-                        if (cells[x - 1, y].state != State.LIGHTNING) cells[x - 1, y].state = State.CANDIDATE;
+                        if (cells[y, x - 1].state != State.LIGHTNING) cells[y, x-1].state = State.CANDIDATE;
 
                     }
                 }
@@ -114,29 +117,33 @@ public class FinalLightning2D : MonoBehaviour {
 
             // 最も確率の高いセルを選ぶ
             float tmp_max_possibility = 0;
-            int tmp_max_possibility_cell_idx = 0;   // ???
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     if(cells[y,x].state == State.CANDIDATE) {
-                        float possibility = Mathf.Pow(cells[y, x].potential, eta) / sum;
-                        if(tmp_max_possibility < possibility) {
-                            tmp_max_possibility = possibility;
-                            tmp_max_possibility_cell_idx = cells[y, x].id;
+                        float possibility = Mathf.Pow(cells[y, x].potential, eta) / Mathf.Pow(sum, eta);
+                        if(possibility > random.xor()) {
+                            cells[y, x].state = State.LIGHTNING;
+                            cells[y, x].potential = 0;
                         }
+                        //if(tmp_max_possibility < possibility) {
+                        //    tmp_max_possibility = possibility;
+                        //}
                     }
                 }
             }
 
-            // TODO 最大値に近いセルも選ぶ
-
-            // 最大値のセルのStateをLightningに変える
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    if (cells[y, x].id == tmp_max_possibility_cell_idx) {
-                        cells[y, x].state = State.LIGHTNING;
-                    }
-                }
-            }
+            //// 最大値に近いセルも選ぶ
+            //for (int y = 0; y < height; y++) {
+            //    for (int x = 0; x < width; x++) {
+            //        if(cells[y, x].state == State.CANDIDATE) {
+            //            float possibility = Mathf.Pow(cells[y, x].potential, eta) / Mathf.Pow(sum, eta);
+            //            if (possibility + 5e-5f > tmp_max_possibility) {
+            //                cells[y, x].state = State.LIGHTNING;
+            //                cells[y, x].potential = 0;
+            //            }
+            //        }
+            //    }
+            //}
             
             ApplyTexture();
 
@@ -172,12 +179,11 @@ public class FinalLightning2D : MonoBehaviour {
 
     void InitializeLaplaceSolver() {
         bufferSize = width * height;
-        potential_read = new float[bufferSize];
-        potential_write = new float[bufferSize];
+        potential_read = new ForGPU[bufferSize];
         threadGroupSize = Mathf.CeilToInt(bufferSize / SIMULATION_BLOCK_SIZE) + 1;
-        potential_buffer_read = new ComputeBuffer(bufferSize, sizeof(float));
-        potential_buffer_write = new ComputeBuffer(bufferSize, sizeof(float));
-        phase1_to_2 = new ComputeBuffer(bufferSize, sizeof(float));
+        potential_buffer_read = new ComputeBuffer(bufferSize, Marshal.SizeOf(typeof(ForGPU)));
+        potential_buffer_write = new ComputeBuffer(bufferSize, Marshal.SizeOf(typeof(ForGPU)));
+        phase1_to_2 = new ComputeBuffer(bufferSize, Marshal.SizeOf(typeof(ForGPU)));
     }
 
     void SetBoundaryCondition() {
@@ -206,7 +212,13 @@ public class FinalLightning2D : MonoBehaviour {
         // set current potential buffer
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                potential_read[y * width + x] = cells[y, x].potential;
+                if (cells[y, x].state == State.LIGHTNING) {
+                    potential_read[y * width + x].isBoundary = true;
+                } else {
+                    potential_read[y * width + x].isBoundary = false;
+                }
+
+                potential_read[y * width + x].potential = cells[y, x].potential;
             }
         }
 
@@ -256,24 +268,38 @@ public class FinalLightning2D : MonoBehaviour {
     void ApplyPotential() {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                cells[y, x].potential = potential_read[y * width + x];
+                cells[y, x].potential = potential_read[y * width + x].potential;
             }
         }
     }
 
     void ApplyTexture() {
 
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                if(cells[y,x].state == State.LIGHTNING) {
-                    lightning_texture.SetPixel(x, (height - 1) - y, new Color(1,1,1));
-                } else if(cells[y,x].state == State.CANDIDATE) {
-                    lightning_texture.SetPixel(x, (height - 1) - y, new Color(0, 0, 1));
-                } else {
-                    lightning_texture.SetPixel(x, (height - 1) - y, new Color(cells[y, x].potential, cells[y, x].potential, cells[y, x].potential));
+        if (!land) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    if (cells[y, x].state == State.LIGHTNING) {
+                        lightning_texture.SetPixel(x, (height - 1) - y, new Color(1, 1, 1));
+                    } else if (cells[y, x].state == State.CANDIDATE) {
+                        //lightning_texture.SetPixel(x, (height - 1) - y, new Color(1, 1, 0));
+                    } else {
+                        lightning_texture.SetPixel(x, (height - 1) - y, new Color(cells[y, x].potential, cells[y, x].potential, cells[y, x].potential));
+                    }
+                }
+            }
+        } else {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    if (cells[y, x].state == State.LIGHTNING) {
+                        lightning_texture.SetPixel(x, (height - 1) - y, new Color(1, 1, 0));
+                    } else {
+                        lightning_texture.SetPixel(x, (height - 1) - y, new Color(0,0,0));
+                    }
                 }
             }
         }
+
+        
         lightning_texture.Apply();
     }
 
