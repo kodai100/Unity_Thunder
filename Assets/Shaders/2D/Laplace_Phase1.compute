@@ -1,0 +1,58 @@
+﻿#pragma kernel Laplace_Phase1
+
+#define SIMULATION_BLOCK_SIZE 256
+
+struct ForGPU {
+	bool isBoundary;
+	float potential;
+};
+
+StructuredBuffer<ForGPU> _PotentialBufferRead;
+RWStructuredBuffer<ForGPU> _PotentialBufferWrite;
+
+cbuffer cb {
+	float SOR_COEF;
+	uint BUFFER_SIZE;
+	uint WIDTH;
+	uint HEIGHT;
+};
+
+[numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
+void Laplace_Phase1(uint3 DTid : SV_DispatchThreadID) {
+
+	const uint center = DTid.x;
+	
+	if (center < WIDTH || center % WIDTH == 0 || center >= BUFFER_SIZE - WIDTH || center % WIDTH == WIDTH - 1) {
+		_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+		return;
+	}
+
+	if (_PotentialBufferRead[center].isBoundary) {
+		_PotentialBufferWrite[center] = _PotentialBufferRead[center];
+		return;
+	}
+
+	uint up = center - WIDTH;
+	uint left = center - 1;
+	uint bottom = center + WIDTH;
+	uint right = center + 1;
+
+	// SOR Phase1
+	if ((uint)(center / WIDTH) % 2 == 0) {
+		if (center % 2 != 0) {
+			_PotentialBufferWrite[center].potential = _PotentialBufferRead[center].potential + SOR_COEF * (0.25 * (_PotentialBufferRead[left].potential + _PotentialBufferRead[right].potential + _PotentialBufferRead[up].potential + _PotentialBufferRead[bottom].potential) - _PotentialBufferRead[center].potential);
+		}
+		else {
+			_PotentialBufferWrite[center].potential = _PotentialBufferRead[center].potential;
+		}
+	}
+	else {
+		if (center % 2 == 0) {
+			_PotentialBufferWrite[center].potential = _PotentialBufferRead[center].potential + SOR_COEF * (0.25 * (_PotentialBufferRead[left].potential + _PotentialBufferRead[right].potential + _PotentialBufferRead[up].potential + _PotentialBufferRead[bottom].potential) - _PotentialBufferRead[center].potential);
+		}
+		else {
+			_PotentialBufferWrite[center].potential = _PotentialBufferRead[center].potential;
+		}
+	}
+
+}
