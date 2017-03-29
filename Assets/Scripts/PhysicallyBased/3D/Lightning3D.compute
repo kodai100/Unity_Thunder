@@ -1,0 +1,106 @@
+﻿#pragma kernel Laplace3D
+#pragma kernel CalcCandidate
+#pragma kernel Breakdown
+
+#include "Random.cginc"
+
+#define SIMULATION_BLOCK_SIZE 32
+#define NONE 0
+#define CANDIDATE 1
+#define LIGHTNING 2
+
+struct Cell {
+	bool isBoundary;
+	int state;
+	float potential;
+	float3 idx;
+	float3 pos;
+};
+
+cbuffer cb {
+	uint WIDTH;
+	uint HEIGHT;
+	uint DEPTH;
+	float _CandidatePotentialSum;
+	int _Eta;
+	float _Time;
+	float _Possibility;
+};
+
+StructuredBuffer<Cell> _Read;
+RWStructuredBuffer<Cell> _Write;
+
+uint CalcLinearIndex(float3 idx) {
+	return (uint)(WIDTH * HEIGHT * idx.z + WIDTH * idx.y + idx.x);
+}
+
+[numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
+void Laplace3D(uint3 DTid : SV_DispatchThreadID) {
+
+	Cell center = _Read[DTid.x];
+
+	if (center.isBoundary) {
+		_Write[DTid.x].potential = _Read[DTid.x].potential;
+		return;
+	}
+
+	if (center.state == LIGHTNING) {
+		_Write[DTid.x].potential = 0;
+		return;
+	}
+
+	uint front = CalcLinearIndex(center.idx + float3(0, 0, -1));
+	uint back =	 CalcLinearIndex(center.idx + float3(0, 0, 1));
+	uint right = CalcLinearIndex(center.idx + float3(1, 0, 0));
+	uint left =  CalcLinearIndex(center.idx + float3(-1, 0, 0));
+	uint up =	 CalcLinearIndex(center.idx + float3(0, 1, 0));
+	uint down =  CalcLinearIndex(center.idx + float3(0, -1, 0));
+
+	_Write[DTid.x].potential = 0.166666 * (_Read[front].potential + _Read[back].potential + _Read[left].potential + _Read[right].potential + _Read[up].potential + _Read[down].potential);
+
+}
+
+[numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
+void CalcCandidate(uint3 DTid : SV_DispatchThreadID) {
+
+	Cell center = _Read[DTid.x];
+
+	if (center.isBoundary) {
+		return;
+	}
+
+	if (center.state == LIGHTNING) {
+		uint front = CalcLinearIndex(center.idx + float3(0, 0, -1));
+		if(_Read[front].state != LIGHTNING) _Write[front].state = CANDIDATE;
+
+		uint back = CalcLinearIndex(center.idx + float3(0, 0, 1));
+		if (_Read[back].state != LIGHTNING) _Write[back].state = CANDIDATE;
+
+		uint right = CalcLinearIndex(center.idx + float3(1, 0, 0));
+		if (_Read[right].state != LIGHTNING) _Write[right].state = CANDIDATE;
+
+		uint left = CalcLinearIndex(center.idx + float3(-1, 0, 0));
+		if (_Read[left].state != LIGHTNING) _Write[left].state = CANDIDATE;
+
+		uint up = CalcLinearIndex(center.idx + float3(0, 1, 0));
+		if (_Read[up].state != LIGHTNING) _Write[up].state = CANDIDATE;
+
+		uint down = CalcLinearIndex(center.idx + float3(0, -1, 0));
+		if (_Read[down].state != LIGHTNING) _Write[down].state = CANDIDATE;
+		
+	}
+}
+
+[numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
+void Breakdown(uint3 DTid : SV_DispatchThreadID) {
+
+	Cell center = _Read[DTid.x];
+
+	if (center.state == CANDIDATE) {
+		float possibility = pow(center.potential, _Eta) / pow(_CandidatePotentialSum, _Eta);
+		if (possibility > /*_Possibility*/nrand(float2(DTid.x * _Time, DTid.x))) {
+			_Write[DTid.x].state = LIGHTNING;
+		}
+	}
+
+}

@@ -1,0 +1,63 @@
+﻿#pragma kernel Laplace3D
+
+#define SIMULATION_BLOCK_SIZE 256
+
+struct Cell {
+	bool isBoundary;
+	float potential;
+	uint3 pos;
+};
+
+StructuredBuffer<Cell> _Read;
+RWStructuredBuffer<Cell> _Write;
+
+cbuffer cb {
+	uint BUFFER_SIZE;
+	uint WIDTH;
+	uint HEIGHT;
+	uint DEPTH;
+};
+
+uint CalcArrayIndex(uint3 pos) {
+	return WIDTH * HEIGHT * pos.z + WIDTH * pos.y + pos.x;
+}
+
+[numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
+void Laplace3D(uint3 DTid : SV_DispatchThreadID) {
+
+	Cell center = _Read[DTid.x];
+
+	//// Front Face
+	//if (center.pos.z == 0) return;
+
+	//// Back Face
+	//if (center.pos.z = DEPTH - 1) return;
+
+	//// Left Face
+	//if (center.pos.x == 0) return;
+
+	//// Right Face
+	//if (center.pos.x == WIDTH - 1) return;
+
+	//// Up Face
+	//if (center.pos.y == HEIGHT - 1) return;
+
+	//// Down Face
+	//if (center.pos.y == 0) return;
+
+	// Lightning Way
+	if (center.isBoundary) {
+		_Write[DTid.x].potential = _Read[DTid.x].potential;
+		return;
+	}
+
+	uint front = CalcArrayIndex(center.pos + uint3(0, 0, -1));
+	uint back =	 CalcArrayIndex(center.pos + uint3(0, 0, 1));
+	uint right = CalcArrayIndex(center.pos + uint3(1, 0, 0));
+	uint left =  CalcArrayIndex(center.pos + uint3(-1, 0, 0));
+	uint up =	 CalcArrayIndex(center.pos + uint3(0, 1, 0));
+	uint down =  CalcArrayIndex(center.pos + uint3(0, -1, 0));
+
+	_Write[DTid.x].potential = 0.25 * (_Read[front].potential + _Read[back].potential + _Read[left].potential + _Read[right].potential + _Read[up].potential + _Read[down].potential);
+
+}
